@@ -63,14 +63,20 @@ public class TokenIntroscpectionService {
                 .getBody();
 
         if (jwt.contains("\"active\":false")) {
-            accessPolicy = new AccessPolicy(jwt, Arrays.asList(), false);
+            accessPolicy = new AccessPolicy(jwt, Arrays.asList(), null, false);
         } else {
-            accessPolicy = new AccessPolicy(jwt, readServicePermissions(jwt), true);
+            Long expiration = readExpiration(jwt);
+            Set<String> permissions = readServicePermissions(jwt);
+            accessPolicy = new AccessPolicy(jwt, permissions, expiration, true);
         }
 
         tokenCache().put(token, accessPolicy, tokenEvictionTtl, TimeUnit.MINUTES);
 
         return accessPolicy;
+    }
+
+    private Long readExpiration(String jwt) {
+        return (Integer) JsonPath.read(jwt, "$.exp") * 1_000L;
     }
 
     private static Set<String> readServicePermissions(String jwt) {
@@ -100,15 +106,25 @@ public class TokenIntroscpectionService {
         public final String jwt;
         public final Collection<String> servicePermissions;
         public final boolean isValid;
+        public final Long expiration;
 
-        public AccessPolicy(String jwt, Collection<String> servicePermissions, boolean isValid) {
+        public AccessPolicy(String jwt, Collection<String> servicePermissions, Long expiration, boolean isValid) {
             this.jwt = jwt;
             this.servicePermissions = servicePermissions;
             this.isValid = isValid;
+            this.expiration = expiration;
         }
 
         public boolean hasAccessTo(String service) {
             return servicePermissions.contains(service);
+        }
+
+        public boolean isValid() {
+            return isValid;
+        }
+
+        public boolean isExpired() {
+            return expiration != null && expiration < System.currentTimeMillis();
         }
 
     }

@@ -43,10 +43,13 @@ public class OidcZuulFilter extends ZuulFilter {
         String token = readToken(ctx);
 
         TokenIntroscpectionService.AccessPolicy accessPolicy = tokenIntroscpectionService.introspectToken(token);
-        String service = serviceExtractor.extractService(ctx);
 
-        if (!accessPolicy.isValid || !accessPolicy.hasAccessTo(service)) {
-            reportAccessDenied();
+        if (!accessPolicy.isValid()) {
+            reportAccessDenied("Invalid Token.");
+        } else if (!accessPolicy.hasAccessTo(targetService(ctx))) {
+            reportAccessDenied("Access denied.");
+        } else if (accessPolicy.isExpired()) {
+            reportAccessDenied("Token expired.");
         }
 
         ctx.getZuulRequestHeaders().replace(HEADER_AUTH, accessPolicy.jwt); // FIXME: seems not to work properly
@@ -54,11 +57,15 @@ public class OidcZuulFilter extends ZuulFilter {
         return null;
     }
 
-    private void reportAccessDenied() {
+    private String targetService(RequestContext ctx) {
+        return serviceExtractor.extractService(ctx);
+    }
+
+    private void reportAccessDenied(String message) {
         RequestContext ctx = RequestContext.getCurrentContext();
         ctx.setResponseStatusCode(403);
         if (ctx.getResponseBody() == null) {
-            ctx.setResponseBody("Access denied.");
+            ctx.setResponseBody(message);
             ctx.setSendZuulResponse(false);
         }
     }
